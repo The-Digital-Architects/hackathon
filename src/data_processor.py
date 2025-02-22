@@ -27,15 +27,14 @@ class WildfireData:
         
         # Clean up coordinates data
         coordinates_df = coordinates_df[['state&teritory', 'latitude', 'longitude']].rename(columns={'state&teritory': 'State'})
+        
+        missing_year_months = zero_submission_df[~zero_submission_df['month'].isin(fire_df['month'])]
+        if not missing_year_months.empty:
+            fire_df = pd.concat([fire_df, missing_year_months], ignore_index=True)
 
         # Merge datasets
         state_df = pd.merge(state_df, coordinates_df, on='State', how='left')
         self.data = combine_data(states_df=state_df, weather_df=weather_df, target_df=fire_df)
-
-        missing_year_months = zero_submission_df[~zero_submission_df['month'].isin(self.data['year_month'])]
-        if not missing_year_months.empty:
-            missing_year_months = missing_year_months.rename(columns={'month': 'year_month'})
-            self.data = pd.concat([self.data, missing_year_months], ignore_index=True)
         
     def prepare_data(self, val_size=0.2):
         # Convert percentage strings to floats
@@ -49,6 +48,7 @@ class WildfireData:
         # Split in train & test data
         train_set = self.data[self.data[self.target_col].notna()]
         test_set = self.data[self.data[self.target_col].isna()]
+        test_set = test_set[test_set['month_since_epoch'] > 12*(2011-1970)-1]
         
         # Create X_test
         self.X_test = test_set.drop(columns=[self.target_col]).reset_index(drop=True)
@@ -83,8 +83,8 @@ class WildfireData:
         self.X_train = self.X_test.astype(np.float32)
 
     def add_month_feature(self, data): 
-        epoch = pd.Timestamp('1970-01-01')
-        data['month_since_epoch'] = ((pd.to_datetime(data['year_month']) - epoch) / np.timedelta64(1, 'm')).astype(int)
+        dates = pd.to_datetime(data['year_month'])
+        data['month_since_epoch'] = ((dates.dt.year - 1970) * 12 + dates.dt.month - 1).astype(int)
         return data
     
     def add_season_feature(self, data): 
@@ -110,7 +110,7 @@ def split_data(X, y, test_size=0.2, random=False):
     
 
 def combine_data(states_df, weather_df, target_df, how='left'):
-    target_df.columns = ['State', 'year_month', 'total_fire_size']
+    target_df = target_df.rename(columns={'STATE': 'State', 'month': 'year_month'})
     combined_df = pd.merge(weather_df, states_df, on='State', how='right')
     combined_df = pd.merge(combined_df, target_df, on=['State', 'year_month'], how=how)
     return combined_df
