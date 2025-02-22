@@ -1,5 +1,6 @@
 from src.data_processor import WildfireData
 from src.models import WildfirePredictor
+from src.create_submission import create_submission
 import pandas as pd
 import numpy as np
 from sklearn.pipeline import Pipeline, make_pipeline
@@ -201,9 +202,8 @@ def main():
     y_pred = best_model.predict(data_processor.X_test)
     
     # Save predictions
-    predictions = pd.DataFrame(X_test_original)
-    predictions['total_fire_size'] = y_pred
-    predictions.to_csv('submission.csv', index=False)
+    assert len(X_test_original) == len(data_processor.X_test)
+    create_submission(X_test_original, y_pred)
 
 if __name__ == "__main__":
     main()
