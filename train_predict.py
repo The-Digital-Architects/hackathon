@@ -1,12 +1,20 @@
 from src.data_processor import WildfireDataProcessor
-from src.model import WildfirePredictor
+from src.models import WildfirePredictor
 import pandas as pd
 import numpy as np
 
 def main():
+
+    config = {
+        'model_params': {
+            'n_estimators': 200,
+            'random_state': 42
+        }
+    }
+
     # Initialize processors
     data_processor = WildfireDataProcessor()
-    model = WildfirePredictor(n_estimators=200)
+    model = WildfirePredictor(config).model
     
     # Load and prepare data
     X, y = data_processor.load_and_prepare_data(

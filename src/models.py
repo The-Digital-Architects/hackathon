@@ -4,7 +4,8 @@ from sklearn.neural_network import MLPClassifier
 import numpy as np
 
 class BaseModel:
-    def __init__(self):
+    def __init__(self, config=None):
+        self.config = config or {}
         self.model = self._create_model()
     
     def _create_model(self):
@@ -45,10 +46,8 @@ class NeuralNetwork(BaseModel):
 
 class WildfirePredictor(BaseModel):
     def _create_model(self, n_estimators=100, random_state=42):
-        return RandomForestRegressor(
-            n_estimators=n_estimators,
-            random_state=random_state
-        )
+        params = self.config.get('model_params', {})
+        return RandomForestRegressor(**params)
     
     def evaluate(self, X, y_true):
         y_pred = self.predict(X)
