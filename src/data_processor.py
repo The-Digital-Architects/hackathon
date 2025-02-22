@@ -23,52 +23,98 @@ class WildfireData:
         state_df = pd.read_csv(state_data_path)
         weather_df = pd.read_csv(weather_data_path)
         coordinates_df = pd.read_csv(coordinates_path)
-        zero_submission_df = pd.read_csv(zero_submission_path)
         
         # Clean up coordinates data
         coordinates_df = coordinates_df[['state&teritory', 'latitude', 'longitude']].rename(columns={'state&teritory': 'State'})
         
-        missing_year_months = zero_submission_df[~zero_submission_df['month'].isin(fire_df['month'])]
-        if not missing_year_months.empty:
-            fire_df = pd.concat([fire_df, missing_year_months], ignore_index=True)
-
-        # Merge datasets
+        # Remove any existing missing or zero rows from fire_df
+        fire_df = fire_df[fire_df['total_fire_size'] > 0]
+        
+        # Merge datasets with filled data
         state_df = pd.merge(state_df, coordinates_df, on='State', how='left')
         self.data = combine_data(states_df=state_df, weather_df=weather_df, target_df=fire_df)
-        
+
+    
+
     def prepare_data(self, val_size=0.2):
         # Convert percentage strings to floats
         self.data['Percentage of Federal Land'] = self.data['Percentage of Federal Land'].str.rstrip('%').astype(float) / 100
         self.data['Urbanization Rate (%)'] = self.data['Urbanization Rate (%)'].astype(float) / 100
         
-        # Create month & season features
-        self.data = self.add_month_feature(self.data)
-        self.data = self.add_season_feature(self.data)
-
-        # Split in train & test data
-        train_set = self.data[self.data[self.target_col].notna()]
-        test_set = self.data[self.data[self.target_col].isna()]
-        test_set = test_set[test_set['month_since_epoch'] > 12*(2011-1970)-1]
+        # First create train set from existing data
+        train_set = self.data[self.data[self.target_col].notna()].copy()
+        print(f"Training set size before split: {len(train_set)}")
+        print(f"Training target stats:\n{train_set[self.target_col].describe()}")
         
-        # Create X_test
-        self.X_test = test_set.drop(columns=[self.target_col]).reset_index(drop=True)
-        self.X_test = self.X_test.sort_values('month_since_epoch').reset_index(drop=True)
+        # Create test set from submission template
+        zero_submission = pd.read_csv(self.zero_submission_path)
+        test_set = zero_submission[['STATE', 'month']].rename(columns={'STATE': 'State'})
+        test_set['year_month'] = test_set['month']  # Set year_month for merging
         
-        # Modified these lines to use ravel()
-        self.y_train = train_set[self.target_col].values.ravel()
+        # Add state features
+        state_columns = ['mean_elevation', 'Land Area (sq mi)', 'Water Area (sq mi)', 
+                        'Percentage of Federal Land', 'Urbanization Rate (%)', 
+                        'latitude', 'longitude']
+        state_data = self.data[['State'] + state_columns].drop_duplicates('State')
+        test_set = pd.merge(test_set, state_data, on='State', how='left')
+        
+        # Add weather features
+        weather_cols = ['PRCP', 'EVAP', 'TMIN', 'TMAX']
+        weather_data = self.data[['State', 'year_month'] + weather_cols].copy()
+        test_set = pd.merge(
+            test_set,
+            weather_data,
+            left_on=['State', 'year_month'],
+            right_on=['State', 'year_month'],
+            how='left'
+        )
+        
+        # Add time-based features to both sets
+        for df in [train_set, test_set]:
+            df = self.add_month_feature(df)
+            df = self.add_season_feature(df)
+        
+        # Fill missing weather values in test set
+        for col in weather_cols:
+            # Calculate averages by state and season
+            avg_by_state_season = train_set.groupby(['State', 'season'])[col].mean()
+            avg_by_state = train_set.groupby('State')[col].mean()
+            
+            # Fill nulls with state-season average, then state average
+            for state in test_set['State'].unique():
+                state_mask = test_set['State'] == state
+                for season in test_set.loc[state_mask, 'season'].unique():
+                    mask = state_mask & (test_set['season'] == season)
+                    try:
+                        fill_val = avg_by_state_season.loc[(state, season)]
+                    except:
+                        fill_val = avg_by_state.loc[state]
+                    test_set.loc[mask & test_set[col].isna(), col] = fill_val
+        
+        # Create final splits
         self.X_train = train_set.drop(columns=[self.target_col]).reset_index(drop=True)
-        # X = self.data[['year', 'month_num', 'mean_elevation', 'Land Area (sq mi)', 
-        #        'Percentage of Federal Land', 'Urbanization Rate (%)']]
-        # y = self.data
-
-        # Split train & validation data
-        self.X_train, self.X_val, self.y_train, self.y_val = split_data(self.X_train, self.y_train, test_size=val_size, random=False)
-
-        print("Training set: ", len(self.X_train), "samples")
-        print("Validation set: ", len(self.X_val), "samples")
-        print("Test set: ", len(self.X_test), "samples")
-
-        print("Done preparing data.")
+        self.y_train = train_set[self.target_col].values.ravel()
+        
+        self.X_test = test_set.reset_index(drop=True)
+        self.X_test = self.X_test.sort_values(['State', 'month']).reset_index(drop=True)
+        
+        # Split train & validation
+        self.X_train, self.X_val, self.y_train, self.y_val = split_data(
+            self.X_train, self.y_train, test_size=val_size, random=False
+        )
+        
+        print("\nDataset splits:")
+        print(f"Training samples: {len(self.X_train)}")
+        print(f"Validation samples: {len(self.X_val)}")
+        print(f"Test samples: {len(self.X_test)}")
+        print("\nFeature statistics:")
+        print(self.X_test.describe())
+        
+        # Verify no missing values
+        missing = self.X_test.isna().sum()
+        if missing.any():
+            print("\nMissing values in test set:")
+            print(missing[missing > 0])
 
     def preprocess_data(self):
         # Scale features
@@ -88,8 +134,9 @@ class WildfireData:
         return data
     
     def add_season_feature(self, data): 
-        data['month_in_year'] = pd.to_datetime(data['year_month']).dt.month
-
+        if 'month_in_year' not in data.columns:
+            data['month_in_year'] = pd.to_datetime(data['year_month']).dt.month
+        
         conditions = [
             data['month_in_year'].isin([12, 1, 2]),
             data['month_in_year'].isin([3, 4, 5]),
@@ -97,9 +144,7 @@ class WildfireData:
             data['month_in_year'].isin([9, 10, 11])
         ]
         choices = ['winter', 'spring', 'summer', 'fall']
-
         data['season'] = np.select(conditions, choices, default='unknown')
-
         return data
 
 def split_data(X, y, test_size=0.2, random=False):

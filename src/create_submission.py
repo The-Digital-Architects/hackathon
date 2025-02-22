@@ -1,11 +1,29 @@
 import pandas as pd
+import os
 
-def create_submission(X_test, y_pred, empty_submission_path="data/zero_submission.csv", target_col='total_fire_size'):
-    empty_pred = pd.read_csv(empty_submission_path)
-    y_pred = pd.Series(y_pred, name=target_col)
-    X_test = X_test.rename(columns={'State': 'STATE', 'year_month': 'month'})
-    X_test[target_col] = y_pred
-    submission = empty_pred.drop(columns=[target_col])
-    submission = submission.merge(X_test[['STATE', 'month', target_col]], on=['STATE', 'month'], how='left')
-    submission.to_csv('submission.csv', index=False)
+def create_submission(predictions_df, output_path='submissions/submission.csv'):
+    """
+    Create submission file from predictions DataFrame
+    
+    Args:
+        predictions_df: DataFrame with columns ['STATE', 'month', 'total_fire_size']
+        output_path: Path to save submission file
+    """
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    # Load zero submission template
+    submission = pd.read_csv('data/zero_submission.csv')
+    
+    # Merge predictions with template
+    submission = submission[['ID', 'STATE', 'month']].merge(
+        predictions_df,
+        on=['STATE', 'month'],
+        how='left'
+    )
+    
+    submission = submission[['ID', 'STATE', 'month', 'total_fire_size']]
 
+    # Save submission file
+    submission.to_csv(output_path, index=False)
+    print(f"Submission saved to {output_path}")

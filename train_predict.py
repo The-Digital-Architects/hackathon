@@ -56,23 +56,28 @@ def train_and_evaluate(data_processor, model_config):
         verbose_feature_names_out=False
     )
 
+    # Fit transform pipeline first
+    X_train_transformed = transform_pipeline.fit_transform(data_processor.X_train)
+    X_val_transformed = transform_pipeline.transform(data_processor.X_val)
+    
+    # Train model separately
+    predictor.model.fit(X_train_transformed, data_processor.y_train)
+    
+    # Make predictions
+    train_score = calculate_custom_score(
+        predictor.model.predict(X_train_transformed),
+        data_processor.y_train
+    )
+    val_score = calculate_custom_score(
+        predictor.model.predict(X_val_transformed),
+        data_processor.y_val
+    )
+    
+    # Create final pipeline
     full_pipeline = Pipeline([
         ('preprocessor', transform_pipeline),
         ('model', predictor.model)
     ])
-
-    # Train and evaluate
-    full_pipeline.fit(data_processor.X_train, data_processor.y_train)
-    
-    # Make predictions using full pipeline
-    train_score = calculate_custom_score(
-        full_pipeline.predict(data_processor.X_train),
-        data_processor.y_train
-    )
-    val_score = calculate_custom_score(
-        full_pipeline.predict(data_processor.X_val),
-        data_processor.y_val
-    )
     
     return full_pipeline, train_score, val_score, transform_pipeline.get_feature_names_out()
 
@@ -196,7 +201,6 @@ def main():
 
     X_test_original = data_processor.X_test.copy()
     print(X_test_original.head())
-    assert False
 
     data_processor.filter_features(['PRCP', 'EVAP', 'TMIN', 'TMAX', 'mean_elevation', 
                                   'Land Area (sq mi)', 'Water Area (sq mi)', 
@@ -237,9 +241,14 @@ def main():
     X_test_transformed = best_model.named_steps['preprocessor'].transform(data_processor.X_test)
     y_pred = best_model.named_steps['model'].predict(X_test_transformed)
     
-    # Save predictions
-    assert len(X_test_original) == len(data_processor.X_test)
-    create_submission(X_test_original, y_pred)
+    # Create submission DataFrame with predictions
+    submission_df = pd.DataFrame({
+        'STATE': X_test_original['State'],
+        'month': X_test_original['month'],
+        'total_fire_size': y_pred
+    })
+    
+    create_submission(submission_df)
 
 if __name__ == "__main__":
     main()
