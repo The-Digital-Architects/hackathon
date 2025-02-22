@@ -19,6 +19,14 @@ class BaseModel:
     
     def save(self, path):
         joblib.dump(self.model, path)
+
+    def evaluate(self, X, y_true):
+        y_pred = self.predict(X)
+        N = len(y_true)
+        log_array = np.abs(np.log(y_pred/y_true))
+        constrained_log_array = np.min(log_array, 10)
+        sum_logs = np.sum(constrained_log_array)
+        return 1/N * sum_logs
     
     @classmethod
     def load(cls, path):
@@ -48,11 +56,3 @@ class WildfirePredictor(BaseModel):
     def _create_model(self, n_estimators=100, random_state=42):
         params = self.config.get('model_params', {})
         return RandomForestRegressor(**params)
-    
-    def evaluate(self, X, y_true):
-        y_pred = self.predict(X)
-        N = len(y_true)
-        log_array = np.abs(np.log(y_pred/y_true))
-        constrained_log_array = np.min(log_array, 10)
-        sum_logs = np.sum(constrained_log_array)
-        return 1/N * sum_logs
