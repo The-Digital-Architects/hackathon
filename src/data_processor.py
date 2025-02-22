@@ -65,9 +65,9 @@ class WildfireData:
         self.X_val = self.scaler.transform(self.X_val)
 
         # Set the type to np.float32
-        self.X_train.astype(np.float32)
-        self.X_val.astype(np.float32)
-        self.X_test.astype(np.float32)
+        self.X_train = self.X_train.astype(np.float32)
+        self.X_val = self.X_val.astype(np.float32)
+        self.X_test = self.X_test.astype(np.float32)
 
     def add_month_feature(self, data): 
         epoch = pd.Timestamp('1970-01-01')
