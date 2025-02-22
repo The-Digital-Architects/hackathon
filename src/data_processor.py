@@ -7,9 +7,9 @@ class WildfireData:
     def __init__(self, fire_data_path, state_data_path, weather_data_path, coordinates_path, zero_submission_path):
         self.scaler = StandardScaler()
         self.data, self.X_train, self.X_val, self.X_test, self.y_train, self.y_val = None, None, None, None, None, None
+        self.target_col = 'total_fire_size'
 
         self.load_data(fire_data_path, state_data_path, weather_data_path, coordinates_path, zero_submission_path)
-        self.target_col = 'total_fire_size'
         self.features = self.data.columns.drop(self.target_col)
 
     def filter_features(self, features):
@@ -28,9 +28,8 @@ class WildfireData:
         # Clean up coordinates data
         coordinates_df = coordinates_df[['state&teritory', 'latitude', 'longitude']].rename(columns={'state&teritory': 'State'})
         
-        missing_year_months = zero_submission_df[~zero_submission_df['month'].isin(fire_df['month'])]
-        if not missing_year_months.empty:
-            fire_df = pd.concat([fire_df, missing_year_months], ignore_index=True)
+        zero_submission_df = zero_submission_df.drop(columns=['ID', self.target_col])  
+        fire_df = pd.concat([fire_df, zero_submission_df], ignore_index=True)
 
         # Merge datasets
         state_df = pd.merge(state_df, coordinates_df, on='State', how='left')
@@ -47,6 +46,8 @@ class WildfireData:
 
         # Split in train & test data
         train_set = self.data[self.data[self.target_col].notna()]
+        #train_set = train_set.dropna(subset=['TMIN', 'TMAX', 'EVAP', 'PRCP'])
+
         test_set = self.data[self.data[self.target_col].isna()]
         test_set = test_set[test_set['month_since_epoch'] > 12*(2011-1970)-1]
         
@@ -109,8 +110,8 @@ def split_data(X, y, test_size=0.2, random=False):
         return train_test_split(X, y, test_size=test_size, random_state=42)
     
 
-def combine_data(states_df, weather_df, target_df, how='left'):
+def combine_data(states_df, weather_df, target_df):
     target_df = target_df.rename(columns={'STATE': 'State', 'month': 'year_month'})
-    combined_df = pd.merge(weather_df, states_df, on='State', how='right')
-    combined_df = pd.merge(combined_df, target_df, on=['State', 'year_month'], how=how)
+    combined_df = pd.merge(target_df, states_df, on='State', how='outer')
+    combined_df = pd.merge(combined_df, weather_df, on=['State', 'year_month'], how='outer')
     return combined_df

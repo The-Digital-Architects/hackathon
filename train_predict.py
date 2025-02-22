@@ -201,8 +201,6 @@ def main():
     data_processor.prepare_data()
 
     X_test_original = data_processor.X_test.copy()
-    print(X_test_original.head())
-    assert False
 
     data_processor.filter_features(['PRCP', 'EVAP', 'TMIN', 'TMAX', 'mean_elevation', 
                                   'Land Area (sq mi)', 'Water Area (sq mi)', 
