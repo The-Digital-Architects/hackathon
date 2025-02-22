@@ -7,9 +7,9 @@ class WildfireData:
     def __init__(self, fire_data_path, state_data_path, weather_data_path, coordinates_path, zero_submission_path):
         self.scaler = StandardScaler()
         self.data, self.X_train, self.X_val, self.X_test, self.y_train, self.y_val = None, None, None, None, None, None
+        self.target_col = 'total_fire_size'
 
         self.load_data(fire_data_path, state_data_path, weather_data_path, coordinates_path, zero_submission_path)
-        self.target_col = 'total_fire_size'
         self.features = self.data.columns.drop(self.target_col)
 
     def filter_features(self, features):
@@ -154,8 +154,8 @@ def split_data(X, y, test_size=0.2, random=False):
         return train_test_split(X, y, test_size=test_size, random_state=42)
     
 
-def combine_data(states_df, weather_df, target_df, how='left'):
+def combine_data(states_df, weather_df, target_df):
     target_df = target_df.rename(columns={'STATE': 'State', 'month': 'year_month'})
-    combined_df = pd.merge(weather_df, states_df, on='State', how='right')
-    combined_df = pd.merge(combined_df, target_df, on=['State', 'year_month'], how=how)
+    combined_df = pd.merge(target_df, states_df, on='State', how='outer')
+    combined_df = pd.merge(combined_df, weather_df, on=['State', 'year_month'], how='outer')
     return combined_df
