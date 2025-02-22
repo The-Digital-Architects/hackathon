@@ -11,6 +11,7 @@ from sklearn.ensemble import StackingRegressor, RandomForestRegressor, GradientB
 from xgboost import XGBRegressor
 from sklearn.linear_model import Ridge
 from sklearn.base import BaseEstimator, TransformerMixin
+from src.create_submission import create_submission
 
 class FeatureNamePreserver(BaseEstimator, TransformerMixin):
     def __init__(self):
@@ -63,24 +64,17 @@ def train_and_evaluate(data_processor, model_config):
     # Train and evaluate
     full_pipeline.fit(data_processor.X_train, data_processor.y_train)
     
-    # Get feature names after transformation
-    feature_names = transform_pipeline.get_feature_names_out()
-    
-    # Transform data and convert to numpy arrays
-    X_train_transformed = transform_pipeline.transform(data_processor.X_train)
-    X_val_transformed = transform_pipeline.transform(data_processor.X_val)
-    
-    # Train score and validation score using numpy arrays
+    # Make predictions using full pipeline
     train_score = calculate_custom_score(
-        predictor.model.predict(X_train_transformed), 
+        full_pipeline.predict(data_processor.X_train),
         data_processor.y_train
     )
     val_score = calculate_custom_score(
-        predictor.model.predict(X_val_transformed), 
+        full_pipeline.predict(data_processor.X_val),
         data_processor.y_val
     )
     
-    return full_pipeline, train_score, val_score, feature_names
+    return full_pipeline, train_score, val_score, transform_pipeline.get_feature_names_out()
 
 def calculate_custom_score(y_pred, y_true):
     # Add small epsilon to avoid log(0)

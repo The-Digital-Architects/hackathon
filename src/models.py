@@ -7,6 +7,7 @@ from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 import numpy as np
+from sklearn.base import BaseEstimator, RegressorMixin
 
 class BaseModel:
     def __init__(self, config=None):
@@ -64,6 +65,28 @@ class NeuralNetwork(BaseModel):
         params = self.config.get('model_params', {})
         return MLPClassifier(**params)
 
+class ModelWrapper(BaseEstimator, RegressorMixin):
+    def __init__(self, estimator):
+        self.estimator = estimator
+
+    def fit(self, X, y):
+        # Convert to numpy array if needed
+        X_arr = X.to_numpy() if hasattr(X, 'to_numpy') else X
+        self.estimator.fit(X_arr, y)
+        return self
+
+    def predict(self, X):
+        # Convert to numpy array if needed
+        X_arr = X.to_numpy() if hasattr(X, 'to_numpy') else X
+        return self.estimator.predict(X_arr)
+
+    def get_params(self, deep=True):
+        return {"estimator": self.estimator}
+
+    def set_params(self, **params):
+        self.estimator = params["estimator"]
+        return self
+
 class WildfirePredictor(BaseModel):
     MODELS = {
         'rf': RandomForestRegressor,
@@ -71,7 +94,7 @@ class WildfirePredictor(BaseModel):
         'ada': AdaBoostRegressor,
         'elastic': ElasticNet,
         'xgb': XGBRegressor,
-        'lgbm': LGBMRegressor,
+        'lgbm': LGBMRegressor,  # Use direct LGBMRegressor
         'catboost': CatBoostRegressor,
         'ext': ExtraTreesRegressor,
         'svr': SVR,
@@ -85,4 +108,5 @@ class WildfirePredictor(BaseModel):
         params = self.config.get('model_params', {})
         model_type = self.config.get('model_type', 'rf')
         model_class = self.MODELS.get(model_type, RandomForestRegressor)
-        return model_class(**params)
+        base_model = model_class(**params)
+        return ModelWrapper(base_model)
