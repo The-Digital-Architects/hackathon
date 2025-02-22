@@ -23,6 +23,7 @@ class WildfireData:
         state_df = pd.read_csv(state_data_path)
         weather_df = pd.read_csv(weather_data_path)
         coordinates_df = pd.read_csv(coordinates_path)
+        self.zero_submission_path = zero_submission_path
         
         # Clean up coordinates data
         coordinates_df = coordinates_df[['state&teritory', 'latitude', 'longitude']].rename(columns={'state&teritory': 'State'})
