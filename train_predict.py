@@ -187,14 +187,16 @@ def main():
         fire_data_path='data/wildfire_sizes_before_2010.csv',
         state_data_path='data/merged_state_data.csv',
         weather_data_path='data/weather_monthly_state_aggregates.csv',
-        coordinates_path='data/state_coordinates.csv',
-        zero_submission_path='data/zero_submission.csv',
+        coordinates_path='data/state_coordinates.csv', 
+        zero_submission_path='data/zero_submission.csv'
     )
     
     # Prepare data
     data_processor.prepare_data()
 
     X_test_original = data_processor.X_test.copy()
+    print(X_test_original.head())
+    assert False
 
     data_processor.filter_features(['PRCP', 'EVAP', 'TMIN', 'TMAX', 'mean_elevation', 
                                   'Land Area (sq mi)', 'Water Area (sq mi)', 
