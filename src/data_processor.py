@@ -9,6 +9,13 @@ class WildfireData:
         self.data, self.X_train, self.X_val, self.X_test, self.y_train, self.y_val = None, None, None, None, None, None
 
         self.load_data(fire_data_path, state_data_path, weather_data_path)
+        self.target_col = 'total_fire_size'
+        self.features = self.data.columns.drop(self.target_col)
+
+    def filter_features(self, features):
+        self.X_train = self.X_train.filter(items=features)
+        self.X_val = self.X_val.filter(items=features)
+        self.X_test = self.X_test.filter(items=features)
 
     def load_data(self, fire_data_path, state_data_path, weather_data_path):
         # Load datasets
@@ -24,26 +31,64 @@ class WildfireData:
         self.data['Percentage of Federal Land'] = self.data['Percentage of Federal Land'].str.rstrip('%').astype(float) / 100
         self.data['Urbanization Rate (%)'] = self.data['Urbanization Rate (%)'].astype(float) / 100
         
-        # Create month and year features
-        self.data['year'] = pd.to_datetime(self.data['month']).dt.year
-        self.data['month_num'] = pd.to_datetime(self.data['month']).dt.month
+        # Create month & season features
+        self.data = self.add_month_feature(self.data)
+        self.data = self.add_season_feature(self.data)
 
-        # split in train & test data
-        train_set = self.data[self.data['total_fire_size'].notna()]
-        test_set = self.data[self.data['total_fire_size'].isna()]
+        # Split in train & test data
+        train_set = self.data[self.data[self.target_col].notna()]
+        test_set = self.data[self.data[self.target_col].isna()]
         
         # Create features and target
-        self.X_test = test_set.pop('total_fire_size')
+        self.X_test = test_set.pop(self.target_col)
 
-        self.y_train = train_set['total_fire_size']
-        self.X_train = train_set.pop('total_fire_size')
+        self.y_train = train_set[self.target_col]
+        self.X_train = train_set.pop(self.target_col)
         # X = self.data[['year', 'month_num', 'mean_elevation', 'Land Area (sq mi)', 
         #        'Percentage of Federal Land', 'Urbanization Rate (%)']]
         # y = self.data
 
-    def preprocess_data():
+        # Split train & validation data
+        self.X_train, self.y_train, self.X_val, self.y_val = split_data(self.X_train, self.y_train, test_size=val_size, random=False)
+
+        print("Training set: ", len(self.X_train), "samples")
+        print("Validation set: ", len(self.X_val), "samples")
+        print("Test set: ", len(self.X_test), "samples")
+
+        print("Done preparing data.")
+
+    def preprocess_data(self):
         # Scale features
-        X_scaled = self.scaler.fit_transform(X)
+        self.scaler = self.scaler.fit(self.X_train)
+        self.X_train = self.scaler.transform(self.X_train)
+        self.X_test = self.scaler.transform(self.X_test)
+        self.X_val = self.scaler.transform(self.X_val)
+
+        # Set the type to np.float32
+        self.X_train.astype(np.float32)
+        self.X_val.astype(np.float32)
+        self.X_test.astype(np.float32)
+
+    def add_month_feature(self, data): 
+        epoch = pd.Timestamp('1970-01-01')
+        data['month_since_epoch'] = ((pd.to_datetime(data['year_month']) - epoch) / np.timedelta64(1, 'M')).astype(int)
+        return data
+    
+    def add_season_feature(self, data): 
+        data['month_in_year'] = pd.to_datetime(data['year_month']).dt.month
+
+        conditions = [
+            data['month_in_year'].isin([12, 1, 2]),
+            data['month_in_year'].isin([3, 4, 5]),
+            data['month_in_year'].isin([6, 7, 8]),
+            data['month_in_year'].isin([9, 10, 11])
+        ]
+        choices = ['winter', 'spring', 'summer', 'fall']
+
+        data['season'] = np.select(conditions, choices, default='unknown')
+
+        return data
+
 
 
 def split_data(X, y, test_size=0.2, random=False):
