@@ -4,11 +4,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 class WildfireData:
-    def __init__(self, fire_data_path, state_data_path, weather_data_path, coordinates_path):
+    def __init__(self, fire_data_path, state_data_path, weather_data_path, coordinates_path, zero_submission_path):
         self.scaler = StandardScaler()
         self.data, self.X_train, self.X_val, self.X_test, self.y_train, self.y_val = None, None, None, None, None, None
 
-        self.load_data(fire_data_path, state_data_path, weather_data_path, coordinates_path)
+        self.load_data(fire_data_path, state_data_path, weather_data_path, coordinates_path, zero_submission_path)
         self.target_col = 'total_fire_size'
         self.features = self.data.columns.drop(self.target_col)
 
@@ -17,12 +17,13 @@ class WildfireData:
         self.X_val = self.X_val.filter(items=features)
         self.X_test = self.X_test.filter(items=features)
 
-    def load_data(self, fire_data_path, state_data_path, weather_data_path, coordinates_path):
+    def load_data(self, fire_data_path, state_data_path, weather_data_path, coordinates_path, zero_submission_path):
         # Load datasets
         fire_df = pd.read_csv(fire_data_path)
         state_df = pd.read_csv(state_data_path)
         weather_df = pd.read_csv(weather_data_path)
         coordinates_df = pd.read_csv(coordinates_path)
+        zero_submission_df = pd.read_csv(zero_submission_path)
         
         # Clean up coordinates data
         coordinates_df = coordinates_df[['state&teritory', 'latitude', 'longitude']].rename(columns={'state&teritory': 'State'})
@@ -30,6 +31,11 @@ class WildfireData:
         # Merge datasets
         state_df = pd.merge(state_df, coordinates_df, on='State', how='left')
         self.data = combine_data(states_df=state_df, weather_df=weather_df, target_df=fire_df)
+
+        missing_year_months = zero_submission_df[~zero_submission_df['month'].isin(self.data['year_month'])]
+        if not missing_year_months.empty:
+            missing_year_months = missing_year_months.rename(columns={'month': 'year_month'})
+            self.data = pd.concat([self.data, missing_year_months], ignore_index=True)
         
     def prepare_data(self, val_size=0.2):
         # Convert percentage strings to floats
@@ -44,8 +50,9 @@ class WildfireData:
         train_set = self.data[self.data[self.target_col].notna()]
         test_set = self.data[self.data[self.target_col].isna()]
         
-        # Create features and target
+        # Create X_test
         self.X_test = test_set.drop(columns=[self.target_col]).reset_index(drop=True)
+        self.X_test = self.X_test.sort_values('month_since_epoch').reset_index(drop=True)
         
         # Modified these lines to use ravel()
         self.y_train = train_set[self.target_col].values.ravel()
@@ -104,6 +111,6 @@ def split_data(X, y, test_size=0.2, random=False):
 
 def combine_data(states_df, weather_df, target_df, how='left'):
     target_df.columns = ['State', 'year_month', 'total_fire_size']
-    combined_df = pd.merge(weather_df, states_df, on='State', how='inner')
+    combined_df = pd.merge(weather_df, states_df, on='State', how='right')
     combined_df = pd.merge(combined_df, target_df, on=['State', 'year_month'], how=how)
     return combined_df
