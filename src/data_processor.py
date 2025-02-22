@@ -40,16 +40,16 @@ class WildfireData:
         test_set = self.data[self.data[self.target_col].isna()]
         
         # Create features and target
-        self.X_test = test_set.pop(self.target_col)
+        self.X_test = test_set.drop(columns=[self.target_col]).reset_index(drop=True)
 
-        self.y_train = train_set[self.target_col]
-        self.X_train = train_set.pop(self.target_col)
+        self.y_train = pd.DataFrame(train_set[self.target_col]).reset_index(drop=True)
+        self.X_train = train_set.drop(columns=[self.target_col]).reset_index(drop=True)
         # X = self.data[['year', 'month_num', 'mean_elevation', 'Land Area (sq mi)', 
         #        'Percentage of Federal Land', 'Urbanization Rate (%)']]
         # y = self.data
 
         # Split train & validation data
-        self.X_train, self.y_train, self.X_val, self.y_val = split_data(self.X_train, self.y_train, test_size=val_size, random=False)
+        self.X_train, self.X_val, self.y_train, self.y_val = split_data(self.X_train, self.y_train, test_size=val_size, random=False)
 
         print("Training set: ", len(self.X_train), "samples")
         print("Validation set: ", len(self.X_val), "samples")
