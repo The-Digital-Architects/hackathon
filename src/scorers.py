@@ -1,20 +1,30 @@
-"""MSE scorer."""
-
 from typing import Any
-
 import numpy as np
+from abc import ABC, abstractmethod
 
-from scoring.scorer import Scorer
+
+class Scorer(ABC):
+    """Abstract base class for all scorers."""
+
+    @abstractmethod
+    def __call__(self, y_true, y_pred, **kwargs):
+        """Calculate the score."""
+        pass
+
+    @abstractmethod
+    def __str__(self):
+        """Return the name of the scorer."""
+        pass
 
 
 class Accuracy(Scorer):
-    """Abstract scorer class from which other scorers inherit from."""
+    """MSE scorer."""
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name):
         """Initialize the scorer with a name."""
         self.name = name
 
-    def __call__(self, y_true: np.ndarray[Any, Any], y_pred: np.ndarray[Any, Any], **kwargs: Any) -> float:
+    def __call__(self, y_true, y_pred, **kwargs):
         """Calculate the score."""
         # Apply a threshold of 0.5 to the predictions
         # Sqeeze the predictions to a 1D array
@@ -25,6 +35,6 @@ class Accuracy(Scorer):
         # Calculate the accuracy
         return np.mean(y_true == y_pred)
 
-    def __str__(self) -> str:
+    def __str__(self):
         """Return the name of the scorer."""
         return self.name

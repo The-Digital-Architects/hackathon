@@ -1,7 +1,5 @@
 data:
-  train_path: "data/raw/iris.csv"
-  test_path: "data/raw/test.csv"
-  processed_dir: "data/processed"
+  train_path: "data/iris.csv"
   target_column: "species"
   test_size: 0.2
   random_state: 42
@@ -10,15 +8,12 @@ pipeline:
   transformers:
     - type: "standard_scaler"
       params: {}
-    - type: "feature_selector"
-      params:
-        n_features: 3  # Select top 3 features from Iris dataset
 
 model:
   type: "random_forest"
   params:
-    n_estimators: 1
-    random_state: 4
+    n_estimators: 100
+    random_state: 42
 
 training:
   test_size: 0.2
