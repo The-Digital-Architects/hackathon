@@ -1,10 +1,14 @@
-from src.data_processor import WildfireDataProcessor
+from src.data_processor import WildfireData
 from src.models import WildfirePredictor
 import pandas as pd
 import numpy as np
 
-def main():
+from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
 
+def main():
     config = {
         'model_params': {
             'n_estimators': 200,
@@ -13,53 +17,68 @@ def main():
     }
 
     # Initialize processors
-    data_processor = WildfireDataProcessor()
+    data_processor = WildfireData(
+        fire_data_path='data/wildfire_sizes_before_2010.csv',
+        state_data_path='data/merged_state_data.csv',
+        weather_data_path='data/weather_monthly_state_aggregates.csv',
+        coordinates_path='data/state_coordinates.csv'
+    )
+
+    # drop features: 'year_month', 'month_in_year'
+    print(data_processor.data.columns)
+    data_processor.filter_features(['PRCP', 'EVAP', 'TMIN', 'TMAX', 'mean_elevation', 'Land Area (sq mi)', 'Water Area (sq mi)', 'Percentage of Federal Land', 'Urbanization Rate (%)', 'latitude', 'longitude', 'total_fire_size'])
+
     model = WildfirePredictor(config).model
     
-    # Load and prepare data
-    X, y = data_processor.load_and_prepare_data(
-        'data/wildfire_sizes_before_2010.csv',
-        'data/merged_state_data.csv'
-    )
+    # Prepare data
+    data_processor.prepare_data()
+
+    print(data_processor.X_train.head())
+    print(data_processor.y_train)
+    print(data_processor.X_val.head())
+    print(data_processor.y_val)
+
+    # pipelines
+    numerical_features = data_processor.X_train.select_dtypes(include=[np.number]).columns
+    # all others are categorical
+    categorical_features = data_processor.X_train.columns.drop(numerical_features)
     
+    num_pipeline = Pipeline([
+        ('imputer', SimpleImputer(strategy='median')),
+        ('scaler', StandardScaler())
+    ])
+
+    cat_pipeline = Pipeline([
+        ('imputer', SimpleImputer(strategy='most_frequent')),
+        ('encoder', OneHotEncoder())
+    ])
+
+    transform_pipeline = ColumnTransformer([
+        ('num', num_pipeline, numerical_features),
+        ('cat', cat_pipeline, categorical_features)
+    ])
+
+    full_pipeline = make_pipeline(transform_pipeline, model)
+
     # Train model
-    print("Training model...")
-    model.fit(X, y)
-    
-    # Generate future predictions
-    state_data = pd.read_csv('data/merged_state_data.csv')  # Changed this line
-    predictions = []
-    
-    for year in range(2011, 2016):
-        for month in range(1, 13):
-            for _, row in state_data.iterrows():  # Changed this line
-                # Create feature vector for prediction
-                features = pd.DataFrame([[
-                    year,
-                    month,
-                    row['mean_elevation'],
-                    row['Land Area (sq mi)'],
-                    float(row['Percentage of Federal Land'].strip('%')) / 100,
-                    float(row['Urbanization Rate (%)'])
-                ]], columns=X.columns)
-                
-                # Scale features
-                features_scaled = data_processor.scaler.transform(features)
-                
-                # Predict
-                prediction = model.predict(features_scaled)[0]
-                
-                predictions.append({
-                    'ID': len(predictions),
-                    'STATE': row['State'],  # Changed this line
-                    'month': f"{year}-{month:02d}",
-                    'total_fire_size': prediction
-                })
-    
+    full_pipeline.fit(data_processor.X_train, data_processor.y_train)
+
+    # Evaluate model
+    train_score = full_pipeline.score(data_processor.X_train, data_processor.y_train)
+
+    val_score = full_pipeline.score(data_processor.X_val, data_processor.y_val)
+
+    print(f"Train score: {train_score}")
+    print(f"Validation score: {val_score}")
+
+    # Predict
+    y_pred = full_pipeline.predict(data_processor.X_test)
+    print(y_pred)
+
     # Save predictions
-    predictions_df = pd.DataFrame(predictions)
-    predictions_df.to_csv('submission.csv', index=False)
-    print("Predictions saved to submission.csv")
+    predictions = pd.DataFrame(data_processor.X_test)
+    predictions['total_fire_size'] = y_pred
+    predictions.to_csv('submission.csv', index=False)
 
 if __name__ == "__main__":
     main()
