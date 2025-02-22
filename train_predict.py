@@ -24,14 +24,14 @@ def main():
         coordinates_path='data/state_coordinates.csv'
     )
 
+    # Prepare data
+    data_processor.prepare_data()
+
     # drop features: 'year_month', 'month_in_year'
     print(data_processor.data.columns)
     data_processor.filter_features(['PRCP', 'EVAP', 'TMIN', 'TMAX', 'mean_elevation', 'Land Area (sq mi)', 'Water Area (sq mi)', 'Percentage of Federal Land', 'Urbanization Rate (%)', 'latitude', 'longitude', 'total_fire_size'])
 
     model = WildfirePredictor(config).model
-    
-    # Prepare data
-    data_processor.prepare_data()
 
     print(data_processor.X_train.head())
     print(data_processor.y_train)
