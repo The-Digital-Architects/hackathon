@@ -10,6 +10,23 @@ from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import StackingRegressor, RandomForestRegressor, GradientBoostingRegressor
 from xgboost import XGBRegressor
 from sklearn.linear_model import Ridge
+from sklearn.base import BaseEstimator, TransformerMixin
+
+class FeatureNamePreserver(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        self.feature_names = None
+        
+    def fit(self, X, y=None):
+        return self
+        
+    def transform(self, X):
+        if hasattr(X, 'columns'):
+            self.feature_names = X.columns.tolist()
+            return X.to_numpy()
+        return X
+    
+    def get_feature_names_out(self, input_features=None):
+        return self.feature_names
 
 def train_and_evaluate(data_processor, model_config):
     predictor = WildfirePredictor(model_config)
@@ -19,34 +36,51 @@ def train_and_evaluate(data_processor, model_config):
     categorical_features = data_processor.X_train.columns.drop(numerical_features)
     
     num_pipeline = Pipeline([
+        ('preserves_names', FeatureNamePreserver()),
         ('imputer', SimpleImputer(strategy='median')),
         ('scaler', StandardScaler())
     ])
 
     cat_pipeline = Pipeline([
+        ('preserves_names', FeatureNamePreserver()),
         ('imputer', SimpleImputer(strategy='most_frequent')),
-        ('encoder', OneHotEncoder())
+        ('encoder', OneHotEncoder(sparse_output=False))
     ])
 
-    transform_pipeline = ColumnTransformer([
-        ('num', num_pipeline, numerical_features),
-        ('cat', cat_pipeline, categorical_features)
+    transform_pipeline = ColumnTransformer(
+        [
+            ('num', num_pipeline, numerical_features),
+            ('cat', cat_pipeline, categorical_features)
+        ],
+        verbose_feature_names_out=False
+    )
+
+    full_pipeline = Pipeline([
+        ('preprocessor', transform_pipeline),
+        ('model', predictor.model)
     ])
 
-    full_pipeline = make_pipeline(transform_pipeline, predictor.model)
-
-    # Train
+    # Train and evaluate
     full_pipeline.fit(data_processor.X_train, data_processor.y_train)
     
-    # Evaluate using predictions from full pipeline
-    y_train_pred = full_pipeline.predict(data_processor.X_train)
-    y_val_pred = full_pipeline.predict(data_processor.X_val)
+    # Get feature names after transformation
+    feature_names = transform_pipeline.get_feature_names_out()
     
-    # Calculate scores using raw predictions and true values
-    train_score = calculate_custom_score(y_train_pred, data_processor.y_train)
-    val_score = calculate_custom_score(y_val_pred, data_processor.y_val)
+    # Transform data and convert to numpy arrays
+    X_train_transformed = transform_pipeline.transform(data_processor.X_train)
+    X_val_transformed = transform_pipeline.transform(data_processor.X_val)
     
-    return full_pipeline, train_score, val_score
+    # Train score and validation score using numpy arrays
+    train_score = calculate_custom_score(
+        predictor.model.predict(X_train_transformed), 
+        data_processor.y_train
+    )
+    val_score = calculate_custom_score(
+        predictor.model.predict(X_val_transformed), 
+        data_processor.y_val
+    )
+    
+    return full_pipeline, train_score, val_score, feature_names
 
 def calculate_custom_score(y_pred, y_true):
     # Add small epsilon to avoid log(0)
@@ -139,7 +173,8 @@ def main():
             'model_params': {
                 'hidden_layer_sizes': (100, 50, 25),
                 'activation': 'relu',
-                'max_iter': 500,
+                'max_iter': 1000,  # Increased from 500
+                'early_stopping': True,  # Added early stopping
                 'random_state': 42
             }
         },
@@ -178,14 +213,17 @@ def main():
     results = {}
     best_model = None
     best_score = -np.inf
+    feature_names = None
     
     for model_name, config in models_config.items():
         print(f"\nTraining {model_name}...")
-        pipeline, train_score, val_score = train_and_evaluate(data_processor, config)
+        pipeline, train_score, val_score, feat_names = train_and_evaluate(data_processor, config)
+        feature_names = feat_names  # Save feature names for later use
         
         results[model_name] = {
             'train_score': train_score,
-            'val_score': val_score
+            'val_score': val_score,
+            'pipeline': pipeline
         }
         
         if val_score > best_score:
@@ -200,9 +238,10 @@ def main():
         print(f"Validation error: {-scores['val_score']:.4f}")
         print(f"(Lower error is better)")
 
-    # Use best model for predictions
+    # Use best model for predictions with numpy arrays
     print(f"\nUsing best model for predictions...")
-    y_pred = best_model.predict(data_processor.X_test)
+    X_test_transformed = best_model.named_steps['preprocessor'].transform(data_processor.X_test)
+    y_pred = best_model.named_steps['model'].predict(X_test_transformed)
     
     # Save predictions
     assert len(X_test_original) == len(data_processor.X_test)
