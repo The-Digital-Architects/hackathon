@@ -1,6 +1,11 @@
 import joblib
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, RandomForestRegressor
-from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, RandomForestRegressor, GradientBoostingRegressor, AdaBoostRegressor, ExtraTreesRegressor, StackingRegressor, VotingRegressor
+from sklearn.neural_network import MLPClassifier, MLPRegressor
+from sklearn.linear_model import ElasticNet, Lasso, Ridge, HuberRegressor
+from sklearn.svm import SVR
+from xgboost import XGBRegressor
+from lightgbm import LGBMRegressor
+from catboost import CatBoostRegressor
 import numpy as np
 
 class BaseModel:
@@ -23,10 +28,17 @@ class BaseModel:
     def evaluate(self, X, y_true):
         y_pred = self.predict(X)
         N = len(y_true)
+        
+        # Add small epsilon to avoid log(0)
+        epsilon = 1e-10
+        y_pred = np.maximum(y_pred, epsilon)
+        y_true = np.maximum(y_true, epsilon)
+        
         log_array = np.abs(np.log(y_pred/y_true))
-        constrained_log_array = np.min(log_array, 10)
+        constrained_log_array = np.minimum(log_array, 10)  # Changed min to minimum
         sum_logs = np.sum(constrained_log_array)
-        return 1/N * sum_logs
+        
+        return -1 * (1/N * sum_logs)  # Negative because we want to maximize
     
     @classmethod
     def load(cls, path):
@@ -53,6 +65,24 @@ class NeuralNetwork(BaseModel):
         return MLPClassifier(**params)
 
 class WildfirePredictor(BaseModel):
-    def _create_model(self, n_estimators=100, random_state=42):
+    MODELS = {
+        'rf': RandomForestRegressor,
+        'gb': GradientBoostingRegressor,
+        'ada': AdaBoostRegressor,
+        'elastic': ElasticNet,
+        'xgb': XGBRegressor,
+        'lgbm': LGBMRegressor,
+        'catboost': CatBoostRegressor,
+        'ext': ExtraTreesRegressor,
+        'svr': SVR,
+        'mlp': MLPRegressor,
+        'huber': HuberRegressor,
+        'ridge': Ridge,
+        'lasso': Lasso
+    }
+
+    def _create_model(self):
         params = self.config.get('model_params', {})
-        return RandomForestRegressor(**params)
+        model_type = self.config.get('model_type', 'rf')
+        model_class = self.MODELS.get(model_type, RandomForestRegressor)
+        return model_class(**params)
