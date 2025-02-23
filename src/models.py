@@ -47,24 +47,6 @@ class BaseModel:
         instance.model = joblib.load(path)
         return instance
 
-
-class RandomForest(BaseModel):
-    def _create_model(self):
-        params = self.config.get('model_params', {})
-        return RandomForestClassifier(**params)
-
-
-class AdaBoost(BaseModel):
-    def _create_model(self):
-        params = self.config.get('model_params', {})
-        return AdaBoostClassifier(**params)
-
-
-class NeuralNetwork(BaseModel):
-    def _create_model(self):
-        params = self.config.get('model_params', {})
-        return MLPClassifier(**params)
-
 class ModelWrapper(BaseEstimator, RegressorMixin):
     def __init__(self, estimator):
         self.estimator = estimator
